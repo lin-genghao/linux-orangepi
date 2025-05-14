@@ -1817,6 +1817,28 @@ config VIDEO_OV13858
 	  This is a Video4Linux2 sensor driver for the OmniVision
 	  OV13858 camera.
 
+config VIDEO_OG02B10
+	tristate "OmniVision OG02B10 sensor support"
+	depends on I2C && VIDEO_DEV
+	depends on MEDIA_CAMERA_SUPPORT
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	help
+	  This is a Video4Linux2 sensor driver for the OmniVision
+	  OG02B10 camera.
+
+config VIDEO_OG02B1B
+	tristate "OmniVision OG02B1B sensor support"
+	depends on I2C && VIDEO_DEV
+	depends on MEDIA_CAMERA_SUPPORT
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	help
+	  This is a Video4Linux2 sensor driver for the OmniVision
+	  OG02B1B camera.
+	  
 config VIDEO_VS6624
 	tristate "ST VS6624 sensor support"
 	depends on VIDEO_V4L2 && I2C

@@ -63,6 +63,8 @@ dtbo-$(CONFIG_ARCH_ROCKCHIP) += \
 	rk3588-ov13855-c1.dtbo \
 	rk3588-ov13855-c2.dtbo \
 	rk3588-ov13855-c3.dtbo \
+	rk3588-og02b1b-c1.dtbo \
+	rk3588-og02b10-c1.dtbo \
 	rk3588-opi5pro-cam1.dtbo \
 	rk3588-opi5pro-cam2.dtbo \
 	rk3588-opi5plus-gc5035.dtbo \

@@ -16,7 +16,7 @@
 
 			mipi_in_ucam0: endpoint@0 {
 				reg = <0>;
-				remote-endpoint = <&ov13850_out2>;
+				remote-endpoint = <&og02b1b_out0>;
 				data-lanes = <1 2>;
 			};
 
@@ -103,6 +103,51 @@
 		port {
 			ov13855_out2: endpoint {
 				remote-endpoint = <&mipi_in_ucam1>;
+				data-lanes = <1 2>;
+			};
+		};
+	};
+
+	og02b1b: og02b1b@60 {
+		compatible = "ovti,og02b1b";
+		status = "disabled";
+		reg = <0x60>;
+		clocks = <&cru CLK_MIPI_CAMARAOUT_M3>;
+		clock-names = "xvclk";
+		pinctrl-names = "default";
+		pinctrl-0 = <&mipim0_camera3_clk>;
+		pwdn-gpios = <&gpio3 RK_PC6 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&gpio3 RK_PC4 GPIO_ACTIVE_LOW>;
+		rockchip,camera-module-index = <0>;
+		rockchip,camera-module-facing = "back";
+		rockchip,camera-module-name = "HK301";
+		rockchip,camera-module-lens-name = "JZ-7070BS-A2-M8";
+		port {
+			og02b1b_out0: endpoint {
+				remote-endpoint = <&mipi_in_ucam0>;
+				data-lanes = <1 2>;
+			};
+		};
+	};
+
+	og02b10: og02b10@60 {
+		compatible = "ovti,og02b10";
+		status = "disabled";
+		reg = <0x60>;
+		clocks = <&cru CLK_MIPI_CAMARAOUT_M3>;
+		clock-names = "xvclk";
+		power-domains = <&power RK3588_PD_VI>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&mipim0_camera3_clk>;
+		pwdn-gpios = <&gpio3 RK_PC6 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&gpio3 RK_PC4 GPIO_ACTIVE_LOW>;
+		rockchip,camera-module-index = <0>;
+		rockchip,camera-module-facing = "back";
+		rockchip,camera-module-name = "HK300";
+		rockchip,camera-module-lens-name = "JZ-7070BS-A2-M8";
+		port {
+			og02b10_out0: endpoint {
+				remote-endpoint = <&mipi_in_ucam0>;
 				data-lanes = <1 2>;
 			};
 		};
