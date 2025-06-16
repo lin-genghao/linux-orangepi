@@ -58,6 +58,13 @@
 #define OG02B1B_EXPOSURE_STEP            1
 #define OG02B1B_VTS_MAX                  0x7fff
 
+#define OG02B10_REG_GROUP_HOLD			0x3208
+#define OG02B10_GROUP0_HOLD_START		0x00
+#define OG02B10_GROUP0_HOLD_END			0x10
+#define OG02B10_GROUP_LAUNCH			0xA0
+#define OG02B10_REG_EXP_H			0x3501
+#define OG02B10_REG_EXP_L			0x3502
+
 #define OG02B1B_REG_GAIN_H               0x3508
 #define OG02B1B_REG_GAIN_L               0x3509
 #define OG02B1B_GAIN_H_MASK              0x07
@@ -68,11 +75,22 @@
 #define OG02B1B_GAIN_STEP                1
 #define OG02B1B_GAIN_DEFAULT             0x10
 
+#define OG02B10_REG_AGAIN_COARSE		0x3508
+#define OG02B10_REG_AGAIN_FINE			0x3509
+#define OG02B10_REG_DGAIN_COARSE		0x350A
+#define OG02B10_REG_DGAIN_FINE_H		0x350B
+#define OG02B10_REG_DGAIN_FINE_L		0x350C
+
 #define OG02B1B_REG_TEST_PATTERN         0x5e00
 #define OG02B1B_TEST_PATTERN_ENABLE      0x80
 #define OG02B1B_TEST_PATTERN_DISABLE     0x0
 
 #define OG02B1B_REG_VTS                  0x380e
+
+#define OG02B10_REG_HTS_H			0x380C
+#define OG02B10_REG_HTS_L			0x380D
+#define OG02B10_REG_VTS_H			0x380E
+#define OG02B10_REG_VTS_L			0x380F
 
 #define OG02B1B_AEC_STROBE_REG           0x3927
 #define OG02B1B_AEC_STROBE_REG_H         0x3927
@@ -144,6 +162,7 @@ struct og02b1b_mode {
         u32 vts_def;
         u32 exp_def;
         const struct regval *reg_list;
+        u32 hdr_mode;
 };
 
 struct og02b1b {
@@ -183,10 +202,16 @@ struct og02b1b {
 #define to_og02b1b(sd) container_of(sd, struct og02b1b, subdev)
 
 static const struct regval og02b1b_global_regs[] = {
+        // SOFTWARE RESET(0:off, 1:on)
         {0x0103, 0x01},
+        // MODE SELECT(0:software_standby, 1:streaming)
         {0x0100, 0x00},
+        //ENTER SAFE MODE(0:Keep, 1:Enter safe mode)
         {0x010c, 0x02},
+        //ENTER SOFTWARE STANDBY(0:Keep, 1:Enter software standby)
         {0x010b, 0x01},
+
+        // PLL control
         {0x0300, 0x01},
         {0x0302, 0x32},
         {0x0303, 0x00},
@@ -195,6 +220,8 @@ static const struct regval og02b1b_global_regs[] = {
         {0x0306, 0x01},
         {0x030d, 0x5a},
         {0x030e, 0x04},
+
+        // SC registers
         {0x3001, 0x02},
         {0x3004, 0x00},
         {0x3005, 0x00},
@@ -208,14 +235,21 @@ static const struct regval og02b1b_global_regs[] = {
         {0x302e, 0x00},
         {0x302f, 0x03},
         {0x3030, 0x10},
+
         {0x303f, 0x03},
+
+        // SCCB control registers
         {0x3103, 0x00},
         {0x3106, 0x08},
         {0x31ff, 0x01},
+
+        //aec_pk registers
         {0x3501, 0x05},
         {0x3502, 0x7c},
         {0x3506, 0x00},
         {0x3507, 0x00},
+
+        //ana control registers
         {0x3620, 0x67},
         {0x3633, 0x78},
         {0x3662, 0x65},
@@ -230,6 +264,8 @@ static const struct regval og02b1b_global_regs[] = {
         {0x36a2, 0x04},
         {0x36a3, 0x80},
         {0x36b0, 0x00},
+
+        //sensor control registers
         {0x3700, 0x35},
         {0x3704, 0x39},
         {0x370a, 0x50},
@@ -238,37 +274,53 @@ static const struct regval og02b1b_global_regs[] = {
         {0x3778, 0x00},
         {0x379b, 0x01},
         {0x379c, 0x10},
+
+        //timing control registers
+        // horizontal start
         {0x3800, 0x00},
         {0x3801, 0x00},
+        // vertical start
         {0x3802, 0x00},
         {0x3803, 0x00},
+        // horizontal end
         {0x3804, 0x06},
         {0x3805, 0x4f},
+        // vertical end
         {0x3806, 0x05},
         {0x3807, 0x23},
+        // ISP output
         {0x3808, 0x06},
         {0x3809, 0x40},
-        {0x380a, 0x05},
-        {0x380b, 0x14},
+        {0x380a, 0x04}, //0x05   
+        {0x380b, 0xb0}, //0x14   
+        // HTS VTS
         {0x380c, 0x03},
         {0x380d, 0xa8},
         {0x380e, 0x0b}, //0x05    0b
         {0x380f, 0x10}, //0x88    10
+        // ISP X/Y WIN
         {0x3810, 0x00},
         {0x3811, 0x08},
         {0x3812, 0x00},
         {0x3813, 0x08},
+        // X/Y odd/even
         {0x3814, 0x11},
         {0x3815, 0x11},
+        // HSYNC start/end
         {0x3816, 0x00},
         {0x3817, 0x01},
-        {0x3818, 0x00},
+        {0x3818, 0x00}, 
         {0x3819, 0x05},
+        // vflip
         {0x3820, 0x00},
         {0x3821, 0x00},
+        // grp_wr_start/grp_wr_start
         {0x382b, 0x32},
+	// hts_global_tx
         {0x382c, 0x0a},
         {0x382d, 0xf8},
+
+        //global shutter control registers
         {0x3881, 0x44},
         {0x3882, 0x02},
         {0x3883, 0x8c},
@@ -300,6 +352,8 @@ static const struct regval og02b1b_global_regs[] = {
         {0x392d, 0x03},
         {0x392e, 0xa8},
         {0x392f, 0x08},
+
+        //BLC control registers
         {0x4001, 0x00},
         {0x4003, 0x40},
         {0x4008, 0x04},
@@ -313,18 +367,30 @@ static const struct regval og02b1b_global_regs[] = {
         {0x4042, 0x11},
         {0x4043, 0x70},
         {0x4045, 0x00},
+
+        // TPM registers
         {0x4409, 0x5f},
+
+	// column_sync registers
         {0x4509, 0x00},
         {0x450b, 0x00},
+
+        // VFIFO registers
         {0x4600, 0x00},
         {0x4601, 0xa0},
+
+	// DVP registers
         {0x4708, 0x09},
         {0x470c, 0x81},
         {0x4710, 0x06},
         {0x4711, 0x00},
+
+        // MIPI control registers
         {0x4800, 0x00},
         {0x481f, 0x30},
         {0x4837, 0x14},
+
+        // PSV control registers
         {0x4f00, 0x00},
         {0x4f07, 0x00},
         {0x4f08, 0x03},
@@ -335,30 +401,40 @@ static const struct regval og02b1b_global_regs[] = {
         {0x4f11, 0x00},
         {0x4f12, 0x07},
         {0x4f13, 0xe2},
+
+        // isp_main control registers
         {0x5000, 0x1f},
         {0x5001, 0x20},
         {0x5026, 0x00},
+
+        // isp_otp_dpc control registers
         {0x5c00, 0x00},
         {0x5c01, 0x2c},
         {0x5c02, 0x00},
         {0x5c03, 0x7f},
+
+        // isp_pre control registers
         {0x5e00, 0x00},
         {0x5e01, 0x41},
+
+        // GLOBAL_SHUTTER_CTRL_31
         {0x38b1, 0x03},
+
         {REG_NULL, 0x00},
 };
 static const struct og02b1b_mode supported_modes[] = {
-           {
+        {
                 .width = 1600,
-                .height = 1300,
+                .height = 1200,
                 .max_fps = {
                         .numerator = 10000,
                         .denominator = 300000,
-                  },
-                  .exp_def = 0x0320,
-                  .hts_def = 0x03a8 * 2,
-                  .vts_def = 0x0b10,
-                  .reg_list = og02b1b_global_regs,
+                },
+                .exp_def = 0x02ea,
+                .hts_def = 0x03a8,
+                .vts_def = 0x0b10,
+                .reg_list = og02b1b_global_regs,
+                .hdr_mode = NO_HDR,
         },
 };
 
@@ -592,9 +668,9 @@ static int og02b1b_g_frame_interval(struct v4l2_subdev *sd,
         struct og02b1b *og02b1b = to_og02b1b(sd);
         const struct og02b1b_mode *mode = og02b1b->cur_mode;
 
-        mutex_lock(&og02b1b->mutex);
+        // mutex_lock(&og02b1b->mutex);
         fi->interval = mode->max_fps;
-        mutex_unlock(&og02b1b->mutex);
+        // mutex_unlock(&og02b1b->mutex);
 
         return 0;
 }
@@ -624,11 +700,15 @@ static long og02b1b_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
                 stream = *((u32 *)arg);
 
                 if (stream)
-                        ret = og02b1b_write_reg(og02b1b->client, OG02B1B_REG_CTRL_MODE,
-                                OG02B1B_REG_VALUE_08BIT, OG02B1B_MODE_STREAMING);
+                        ret = og02b1b_write_reg(og02b1b->client, 
+                                OG02B1B_REG_CTRL_MODE,
+                                OG02B1B_REG_VALUE_08BIT, 
+                                OG02B1B_MODE_STREAMING);
                 else
-                        ret = og02b1b_write_reg(og02b1b->client, OG02B1B_REG_CTRL_MODE,
-                                OG02B1B_REG_VALUE_08BIT, OG02B1B_MODE_SW_STANDBY);
+                        ret = og02b1b_write_reg(og02b1b->client, 
+                                OG02B1B_REG_CTRL_MODE,
+                                OG02B1B_REG_VALUE_08BIT, 
+                                OG02B1B_MODE_SW_STANDBY);
                 break;
         default:
                 ret = -ENOIOCTLCMD;
@@ -691,11 +771,12 @@ static int __og02b1b_start_stream(struct og02b1b *og02b1b)
 {
         int ret;
 
-        if (!og02b1b->is_thunderboot) {
-                ret = og02b1b_write_array(og02b1b->client, og02b1b->cur_mode->reg_list);
-                if (ret)
-                        return ret;
-        }
+        // if (!og02b1b->is_thunderboot) {
+        ret = og02b1b_write_array(og02b1b->client, og02b1b->cur_mode->reg_list);
+        if (ret)
+                return ret;
+        // }
+
         /* In case these controls are set before streaming */
         mutex_unlock(&og02b1b->mutex);
         ret = v4l2_ctrl_handler_setup(&og02b1b->ctrl_handler);
@@ -703,17 +784,21 @@ static int __og02b1b_start_stream(struct og02b1b *og02b1b)
         if (ret)
                 return ret;
 
-        return og02b1b_write_reg(og02b1b->client, OG02B1B_REG_CTRL_MODE,
-                                OG02B1B_REG_VALUE_08BIT, OG02B1B_MODE_STREAMING);
+        return og02b1b_write_reg(og02b1b->client, 
+                                OG02B1B_REG_CTRL_MODE,
+                                OG02B1B_REG_VALUE_08BIT, 
+                                OG02B1B_MODE_STREAMING);
 }
 
 static int __og02b1b_stop_stream(struct og02b1b *og02b1b)
 {
         printk("OG02B1B function:%s line:%d\n",__FUNCTION__,__LINE__);
-        if (og02b1b->is_thunderboot)
-                og02b1b->is_first_streamoff = true;
-        return og02b1b_write_reg(og02b1b->client, OG02B1B_REG_CTRL_MODE,
-                                OG02B1B_REG_VALUE_08BIT, OG02B1B_MODE_SW_STANDBY);
+        // if (og02b1b->is_thunderboot)
+        //         og02b1b->is_first_streamoff = true;
+        return og02b1b_write_reg(og02b1b->client, 
+                                OG02B1B_REG_CTRL_MODE,
+                                OG02B1B_REG_VALUE_08BIT, 
+                                OG02B1B_MODE_SW_STANDBY);
 }
 
 static int og02b1b_s_stream(struct v4l2_subdev *sd, int on)
@@ -723,6 +808,7 @@ static int og02b1b_s_stream(struct v4l2_subdev *sd, int on)
         int ret = 0;
 
         printk("OG02B1B function:%s line:%d\n",__FUNCTION__,__LINE__);
+
         mutex_lock(&og02b1b->mutex);
         on = !!on;
         if (on == og02b1b->streaming)
@@ -805,9 +891,9 @@ static int __og02b1b_power_on(struct og02b1b *og02b1b)
 
         printk("OG02B1B function:%s line:%d\n",__FUNCTION__,__LINE__);
         /* No need when thunderboot. */
-        if (og02b1b->is_thunderboot) {
-                return 0;
-        }
+        // if (og02b1b->is_thunderboot) {
+        //         return 0;
+        // }
 
         if (!IS_ERR_OR_NULL(og02b1b->pins_default)) {
                 ret = pinctrl_select_state(og02b1b->pinctrl,
@@ -815,7 +901,6 @@ static int __og02b1b_power_on(struct og02b1b *og02b1b)
                 if (ret < 0)
                         dev_err(dev, "could not set pins\n");
         }
-
         ret = clk_set_rate(og02b1b->xvclk, OG02B1B_XVCLK_FREQ);
         if (ret < 0)
                 dev_warn(dev, "Failed to set xvclk rate (24MHz)\n");
@@ -826,7 +911,6 @@ static int __og02b1b_power_on(struct og02b1b *og02b1b)
                 dev_err(dev, "Failed to enable xvclk\n");
                 return ret;
         }
-
         if (!IS_ERR(og02b1b->reset_gpio))
                 gpiod_set_value_cansleep(og02b1b->reset_gpio, 1);
 
@@ -861,14 +945,14 @@ static void __og02b1b_power_off(struct og02b1b *og02b1b)
         struct device *dev = &og02b1b->client->dev;
 
         printk("OG02B1B function:%s line:%d\n",__FUNCTION__,__LINE__);
-        if (og02b1b->is_thunderboot) {
-                if (og02b1b->is_first_streamoff) {
-                        og02b1b->is_thunderboot = false;
-                        og02b1b->is_first_streamoff = false;
-                } else {
-                        return;
-                }
-        }
+        // if (og02b1b->is_thunderboot) {
+        //         if (og02b1b->is_first_streamoff) {
+        //                 og02b1b->is_thunderboot = false;
+        //                 og02b1b->is_first_streamoff = false;
+        //         } else {
+        //                 return;
+        //         }
+        // }
 
         if (!IS_ERR(og02b1b->pwdn_gpio))
                 gpiod_set_value_cansleep(og02b1b->pwdn_gpio, 0);
@@ -936,9 +1020,10 @@ static int og02b1b_enum_frame_interval(struct v4l2_subdev *sd,
         if (fie->index >= ARRAY_SIZE(supported_modes))
                 return -EINVAL;
 
-        if (fie->code != MEDIA_BUS_FMT_SBGGR10_1X10)
-                return -EINVAL;
+        // if (fie->code != MEDIA_BUS_FMT_SBGGR10_1X10)
+        //         return -EINVAL;
 
+        fie->code = MEDIA_BUS_FMT_SBGGR10_1X10;
         fie->width = supported_modes[fie->index].width;
         fie->height = supported_modes[fie->index].height;
         fie->interval = supported_modes[fie->index].max_fps;
@@ -1006,7 +1091,12 @@ static int og02b1b_set_ctrl(struct v4l2_ctrl *ctrl)
         struct i2c_client *client = og02b1b->client;
         s64 max;
         int ret = 0;
-
+	u8 again = 0, dgain = 1;
+	u8 again_fin = 0, dgain_fin_l = 0, dgain_fin_h = 0;
+	u32 dgain_fin = 0;
+        
+        u16 vts_val = 0;
+        
         /* Propagate change of current control to all related controls */
         switch (ctrl->id) {
         case V4L2_CID_VBLANK:
@@ -1024,31 +1114,127 @@ static int og02b1b_set_ctrl(struct v4l2_ctrl *ctrl)
 
         switch (ctrl->id) {
         case V4L2_CID_EXPOSURE:
-                og02b1b_write_reg(og02b1b->client, OV9282_AEC_GROUP_UPDATE_ADDRESS,
-                                       OG02B1B_REG_VALUE_08BIT, OV9282_AEC_GROUP_UPDATE_START_DATA);
+                // og02b1b_write_reg(og02b1b->client, OV9282_AEC_GROUP_UPDATE_ADDRESS,
+                //                        OG02B1B_REG_VALUE_08BIT, OV9282_AEC_GROUP_UPDATE_START_DATA);
 
-                /* 4 least significant bits of expsoure are fractional part */
-                ret = og02b1b_write_reg(og02b1b->client, OG02B1B_REG_EXPOSURE,
-                                       OG02B1B_REG_VALUE_24BIT, ctrl->val << 4);
+                // /* 4 least significant bits of expsoure are fractional part */
+                // ret = og02b1b_write_reg(og02b1b->client, OG02B1B_REG_EXPOSURE,
+                //                        OG02B1B_REG_VALUE_24BIT, ctrl->val << 4);
 
-                og02b1b_write_reg(og02b1b->client, OV9282_AEC_GROUP_UPDATE_ADDRESS,
-                                       OG02B1B_REG_VALUE_08BIT, OV9282_AEC_GROUP_UPDATE_END_DATA);
-                og02b1b_write_reg(og02b1b->client, OV9282_AEC_GROUP_UPDATE_ADDRESS,
-                                       OG02B1B_REG_VALUE_08BIT, OV9282_AEC_GROUP_UPDATE_END_LAUNCH);
+                // og02b1b_write_reg(og02b1b->client, OV9282_AEC_GROUP_UPDATE_ADDRESS,
+                //                        OG02B1B_REG_VALUE_08BIT, OV9282_AEC_GROUP_UPDATE_END_DATA);
+                // og02b1b_write_reg(og02b1b->client, OV9282_AEC_GROUP_UPDATE_ADDRESS,
+                //                        OG02B1B_REG_VALUE_08BIT, OV9282_AEC_GROUP_UPDATE_END_LAUNCH);
+                
+		ret = og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_GROUP_HOLD, OG02B1B_REG_VALUE_08BIT, OG02B10_GROUP0_HOLD_START);
+		ret |= og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_EXP_H, OG02B1B_REG_VALUE_08BIT, (ctrl->val >> 8) & 0xFF);
+		ret |= og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_EXP_L, OG02B1B_REG_VALUE_08BIT, ctrl->val & 0xFF);
+		ret |= og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_GROUP_HOLD, OG02B1B_REG_VALUE_08BIT, OG02B10_GROUP0_HOLD_END);
+		ret |= og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_GROUP_HOLD, OG02B1B_REG_VALUE_08BIT, OG02B10_GROUP_LAUNCH);
+		dev_dbg(&client->dev, "set exposure %#x(%d)\n", ctrl->val, ctrl->val);
                 break;
         case V4L2_CID_ANALOGUE_GAIN:
-                ret = og02b1b_write_reg(og02b1b->client, OG02B1B_REG_GAIN_H,
-                                       OG02B1B_REG_VALUE_08BIT,
-                                       (ctrl->val >> OG02B1B_GAIN_H_SHIFT) & OG02B1B_GAIN_H_MASK);
-                ret |= og02b1b_write_reg(og02b1b->client, OG02B1B_REG_GAIN_L,
-                                       OG02B1B_REG_VALUE_08BIT,
-                                       ctrl->val & OG02B1B_GAIN_L_MASK);
+                // ret = og02b1b_write_reg(og02b1b->client, OG02B1B_REG_GAIN_H,
+                //                        OG02B1B_REG_VALUE_08BIT,
+                //                        (ctrl->val >> OG02B1B_GAIN_H_SHIFT) & OG02B1B_GAIN_H_MASK);
+                // ret |= og02b1b_write_reg(og02b1b->client, OG02B1B_REG_GAIN_L,
+                //                        OG02B1B_REG_VALUE_08BIT,
+                //                        ctrl->val & OG02B1B_GAIN_L_MASK);
+
+		/* val = again * dgain
+		 * again = 1 ~ 15.5
+		 * dgain = 1 ~ 3.98
+		 *
+		 * val = rounddown(again * dgain * 16 + 0.5)
+		 *
+		 * val:
+		 * 1 ~ 248     again: val / 16
+		 *	       dgain: 1
+		 * 248 ~ 988   again: 15.5
+		 *	       dgain: val / 248
+		 *
+		 * again_value	      again_fine_step_value
+		 * 1.0000 ~ 1.9375	  1/16
+		 * 2.000  ~ 3.875	  1/8
+		 * 4.00	  ~ 7.75	  1/4
+		 * 8.0	  ~ 15.5	  1/2
+		 *
+		 * dgain_value	      dgain_fine_step_value
+		 * 1 ~ 3.98		 1/1024
+		 */
+		if (ctrl->val > 248) {
+			again = 15;
+			again_fin = 1;
+
+			dgain = ctrl->val / 248;
+			dgain_fin = ((ctrl->val - dgain * 248) << 10) / 248;
+			dgain_fin_h = (dgain_fin >> 2) & 0xff;
+			dgain_fin_l = dgain_fin & 0x3;
+		} else {
+			again = ctrl->val >> 4;
+			if (again == 1)
+				again_fin = ctrl->val & 0xf;
+			else if (again >= 2 && again < 4)
+				again_fin = (ctrl->val & 0xf) >> 1;
+			else if (again >= 4 && again < 8)
+				again_fin = (ctrl->val & 0xf) >> 2;
+			else if (again >= 8)
+				again_fin = (ctrl->val & 0xf) >> 3;
+
+			dgain = 1;
+			dgain_fin_l = 0;
+			dgain_fin_h = 0;
+		}
+
+		ret = og02b1b_write_reg(og02b1b->client,
+					OG02B10_REG_GROUP_HOLD, OG02B1B_REG_VALUE_08BIT, OG02B10_GROUP0_HOLD_START);
+
+		ret |= og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_AGAIN_COARSE, OG02B1B_REG_VALUE_08BIT, again);
+		ret |= og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_AGAIN_FINE, OG02B1B_REG_VALUE_08BIT, (again_fin << 4));
+
+		ret |= og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_DGAIN_COARSE, OG02B1B_REG_VALUE_08BIT, dgain);
+		ret |= og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_DGAIN_FINE_H, OG02B1B_REG_VALUE_08BIT, dgain_fin_h);
+		ret |= og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_DGAIN_FINE_L, OG02B1B_REG_VALUE_08BIT, dgain_fin_l);
+
+		ret |= og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_GROUP_HOLD, OG02B1B_REG_VALUE_08BIT, OG02B10_GROUP0_HOLD_END);
+		ret |= og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_GROUP_HOLD, OG02B1B_REG_VALUE_08BIT, OG02B10_GROUP_LAUNCH);
+
+		dev_dbg(&client->dev,
+			"set gain %#x, again = %#x(%u), again fine = %#x(%u), dgain = %#x(%u), dgain fine = %#x(%u)\n",
+			ctrl->val, again, again, again_fin, again_fin,
+			dgain, dgain, dgain_fin, dgain_fin);
                 break;
         case V4L2_CID_VBLANK:
-                ret = og02b1b_write_reg(og02b1b->client, OG02B1B_REG_VTS,
-                                       OG02B1B_REG_VALUE_16BIT,
-                                       ctrl->val + og02b1b->cur_mode->height);
-                break;
+                // ret = og02b1b_write_reg(og02b1b->client, OG02B1B_REG_VTS,
+                //                        OG02B1B_REG_VALUE_16BIT,
+                //                        ctrl->val + og02b1b->cur_mode->height);
+                // break;
+
+		vts_val = og02b1b->cur_mode->height + ctrl->val;
+		ret = og02b1b_write_reg(og02b1b->client,
+					OG02B10_REG_GROUP_HOLD, OG02B1B_REG_VALUE_08BIT, OG02B10_GROUP0_HOLD_START);
+		ret |= og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_VTS_H, OG02B1B_REG_VALUE_08BIT, (vts_val >> 8) & 0xFF);
+		ret |= og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_VTS_L, OG02B1B_REG_VALUE_08BIT, vts_val & 0xFF);
+		ret |= og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_GROUP_HOLD, OG02B1B_REG_VALUE_08BIT, OG02B10_GROUP0_HOLD_END);
+		ret |= og02b1b_write_reg(og02b1b->client,
+					 OG02B10_REG_GROUP_HOLD, OG02B1B_REG_VALUE_08BIT, OG02B10_GROUP_LAUNCH);
+		dev_dbg(&client->dev, "set vblank %#x\n", vts_val);
+		break;
         case V4L2_CID_BRIGHTNESS:
                 ret = og02b1b_write_reg(og02b1b->client, OG02B1B_AEC_STROBE_REG_H,
                                            OG02B1B_REG_VALUE_08BIT,
@@ -1232,7 +1418,7 @@ static int og02b1b_probe(struct i2c_client *client,
 
         og02b1b->client = client;
         og02b1b->cur_mode = &supported_modes[0];
-        og02b1b->is_thunderboot = IS_ENABLED(CONFIG_VIDEO_ROCKCHIP_THUNDER_BOOT_ISP);
+        // og02b1b->is_thunderboot = IS_ENABLED(CONFIG_VIDEO_ROCKCHIP_THUNDER_BOOT_ISP);
 
         og02b1b->xvclk = devm_clk_get(dev, "xvclk");
         if (IS_ERR(og02b1b->xvclk)) {
